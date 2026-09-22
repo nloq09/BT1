@@ -327,10 +327,7 @@
     </div>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
-    <span class="live-badge">● LIVE</span>
-    <a href="index.html" class="btn btn-primary" style="text-decoration:none;padding:8px 16px">
-      ➕ Tạo ván mới
-    </a>
+    <span class="live-badge">● LIVE GIÁM SÁT</span>
   </div>
 </header>
 
@@ -359,12 +356,8 @@
 
 <!-- Empty state -->
 <div id="empty-state">
-  <h3>🎮 Chưa có ván nào đang diễn ra</h3>
-  <p>Khi có người bắt đầu chơi, các ván sẽ xuất hiện ở đây.</p>
-  <br>
-  <a href="index.html" class="btn btn-primary" style="text-decoration:none;display:inline-block">
-    ➕ Tạo ván mới
-  </a>
+  <h3>🎮 Hiện chưa có ván nào đang diễn ra</h3>
+  <p>Hệ thống đang tự động quét. Khi có phòng bắt đầu chơi, bàn cờ sẽ tự động xuất hiện tại đây.</p>
 </div>
 
 <!-- Modal phóng to -->
@@ -374,13 +367,8 @@
     <h2 id="modal-title">Phòng: —</h2>
     <div class="modal-meta" id="modal-meta"></div>
     <div id="modal-board-grid"></div>
-    <div style="margin-top:12px;text-align:center">
-      <a id="modal-join-a" href="#" class="btn" style="background:var(--clr-red);color:white;text-decoration:none;margin:4px">
-        🔴 Tham gia phe Đỏ
-      </a>
-      <a id="modal-join-b" href="#" class="btn" style="background:var(--clr-blue);color:#000;text-decoration:none;margin:4px">
-        🔵 Tham gia phe Xanh
-      </a>
+    <div style="margin-top:16px;text-align:center;color:var(--clr-muted);font-size:0.85rem">
+      👁 <em>Chế độ chỉ xem (Spectator Mode) — Tự động cập nhật trực tiếp theo thời gian thực</em>
     </div>
   </div>
 </div>
@@ -450,13 +438,14 @@
     const data = roomsState.get(roomId);
     if (!data) return;
 
-    let card = document.getElementById(`card-${CSS.escape(roomId)}`);
+    const cardDomId = `card-${roomId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    let card = document.getElementById(cardDomId);
 
     if (!card) {
       // Tạo card mới
       card = document.createElement('div');
       card.className = 'room-card';
-      card.id = `card-${roomId}`;
+      card.id = cardDomId;
       card.onclick = () => openModal(roomId);
       document.getElementById('rooms-grid').appendChild(card);
     }
@@ -492,10 +481,7 @@
       <div class="room-presence">${dotA} ${dotB}</div>
       <div id="${miniBoardId}"></div>
       <div class="room-footer">
-        <a href="index.html?room=${encodeURIComponent(roomId)}&player=A" onclick="event.stopPropagation()">Tham gia 🔴</a>
-        &nbsp;|&nbsp;
-        <a href="index.html?room=${encodeURIComponent(roomId)}&player=B" onclick="event.stopPropagation()">Tham gia 🔵</a>
-        &nbsp;|&nbsp; Click để phóng to
+        <span>🔍 Click vào thẻ để phóng to bàn cờ</span>
       </div>
       ${winner ? `<div class="winner-overlay">🏆 ${winner === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} THẮNG</div>` : ''}
     `;
@@ -514,12 +500,6 @@
     modalRoomId = roomId;
     document.getElementById('modal-overlay').classList.add('active');
     renderModalBoard(roomId);
-
-    // Join links
-    document.getElementById('modal-join-a').href =
-      `index.html?room=${encodeURIComponent(roomId)}&player=A`;
-    document.getElementById('modal-join-b').href =
-      `index.html?room=${encodeURIComponent(roomId)}&player=B`;
   }
 
   function renderModalBoard(roomId) {

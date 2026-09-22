@@ -2,7 +2,7 @@
  * net/sync.js — Tích hợp PlayHTML để đồng bộ trạng thái game real-time.
  *
  * Chuẩn API theo tài liệu chính thức:
- *   await playhtml.init({ room: roomId });
+ *   await playhtml.init({ room: 'ottv2-hub-production' });
  *   await playhtml.ready;
  *   const channel = playhtml.createPageData(channelKey, defaultState);
  *   const data = channel.getData();
@@ -13,6 +13,9 @@
 import { playhtml } from 'https://unpkg.com/playhtml';
 import { createInitialBoard, getLegalMoves, applyMove } from '../core/game.js';
 
+// ── Tên Hub toàn cục dùng chung để Spectator và các phòng cùng kết nối ────────
+const GLOBAL_APP_ROOM = 'ottv2-hub-production';
+
 // ── State module ─────────────────────────────────────────────────────────────
 let _gameChannel = null;
 let _roomsChannel = null;
@@ -21,12 +24,12 @@ let _myPlayer = null;
 let _onStateUpdate = null;
 let _initPromise = null;
 
-// Khởi tạo PlayHTML một lần duy nhất và đợi ready
-async function _ensureInit(roomId) {
+// Khởi tạo PlayHTML một lần duy nhất kết nối vào Hub chung
+async function _ensureInit() {
   if (!_initPromise) {
     _initPromise = (async () => {
-      console.log('[sync] Initializing PlayHTML with room:', roomId);
-      await playhtml.init({ room: roomId || 'global' });
+      console.log('[sync] Initializing PlayHTML Hub:', GLOBAL_APP_ROOM);
+      await playhtml.init({ room: GLOBAL_APP_ROOM });
       await playhtml.ready;
       console.log('[sync] PlayHTML ready ✅');
     })();
@@ -59,7 +62,7 @@ export async function initSync(roomId, myPlayer, onStateUpdate) {
   _onStateUpdate = onStateUpdate;
 
   // 1. Khởi tạo và đợi kết nối hoàn tất
-  await _ensureInit(roomId);
+  await _ensureInit();
 
   const defaultState = createInitialBoard();
   const channelKey = `ottv2-game-${roomId}`;
@@ -74,7 +77,7 @@ export async function initSync(roomId, myPlayer, onStateUpdate) {
     }
   });
 
-  // 4. Đăng ký phòng vào registry
+  // 4. Đăng ký phòng vào registry toàn cục
   if (myPlayer) {
     _registerRoom(roomId, myPlayer);
   }
@@ -132,6 +135,7 @@ export function sendMove(fromRow, fromCol, toRow, toCol) {
       draft.reason        = newState.reason;
       draft.capturedTypes = newState.capturedTypes;
       draft.moveHistory   = newState.moveHistory;
+      draft.rematchVotes  = newState.rematchVotes ?? { A: false, B: false };
     });
   } catch (err) {
     console.warn('[sync] setData with draft updater failed, fallback to direct object:', err);
@@ -145,18 +149,18 @@ export function sendMove(fromRow, fromCol, toRow, toCol) {
 // ── Presence ─────────────────────────────────────────────────────────────────
 
 export async function subscribePresence(onPresenceUpdate) {
-  await _ensureInit(_roomId);
+  await _ensureInit();
 
   if (typeof playhtml.onPresenceChange === 'function') {
     playhtml.onPresenceChange((users) => {
-      const playerA = users.some(u => u.metadata?.player === 'A');
-      const playerB = users.some(u => u.metadata?.player === 'B');
+      const playerA = users.some(u => u.metadata?.player === 'A' && u.metadata?.roomId === _roomId);
+      const playerB = users.some(u => u.metadata?.player === 'B' && u.metadata?.roomId === _roomId);
       onPresenceUpdate({ playerA, playerB, count: users.length });
     });
   }
 
   if (_myPlayer && typeof playhtml.setUserMetadata === 'function') {
-    playhtml.setUserMetadata({ player: _myPlayer });
+    playhtml.setUserMetadata({ player: _myPlayer, roomId: _roomId });
   }
 }
 
@@ -164,7 +168,7 @@ export async function subscribePresence(onPresenceUpdate) {
 
 function _registerRoom(roomId, player) {
   if (!_roomsChannel) {
-    _roomsChannel = playhtml.createPageData('ottv2-rooms', { rooms: {} });
+    _roomsChannel = playhtml.createPageData('ottv2-rooms-registry', { rooms: {} });
   }
 
   try {
@@ -217,17 +221,17 @@ export function unregisterRoom() {
 // ── Subscribe cho spectator ───────────────────────────────────────────────────
 
 export async function subscribeAllRooms(onRoomList, onRoomState) {
-  await _ensureInit('spectator');
+  await _ensureInit();
 
   if (!_roomsChannel) {
-    _roomsChannel = playhtml.createPageData('ottv2-rooms', { rooms: {} });
+    _roomsChannel = playhtml.createPageData('ottv2-rooms-registry', { rooms: {} });
   }
 
   const subscribedRooms = new Map();
 
   function subscribeRoom(roomId) {
     if (subscribedRooms.has(roomId)) return;
-    const ch = playhtml.createPageData(`ottv2-game-${roomId}`, null);
+    const ch = playhtml.createPageData(`ottv2-game-${roomId}`, createInitialBoard());
     subscribedRooms.set(roomId, ch);
     ch.onUpdate((state) => {
       if (state) onRoomState(roomId, state);
