@@ -137,6 +137,12 @@ function _handleCellClick(row, col, state, myPlayer) {
   // Spectator hoặc game đã kết thúc → không làm gì
   if (!myPlayer || state.winner !== null) return;
 
+  // Kiểm tra đủ 2 người chơi chưa
+  if (!state.joinedPlayers?.A || !state.joinedPlayers?.B) {
+    showNotification('⏳ Đang chờ người chơi thứ 2 tham gia để bắt đầu!', 'warn');
+    return;
+  }
+
   // Không phải lượt của mình
   if (state.turn !== myPlayer) {
     showNotification('Không phải lượt của bạn!', 'warn');
@@ -224,6 +230,7 @@ export function renderStatus(state, myPlayer, presence) {
 
   const isMyTurn = state.turn === myPlayer;
   const turnLabel = state.turn === PLAYER.A ? '🔴 Đỏ' : '🔵 Xanh';
+  const isFull = state.joinedPlayers?.A && state.joinedPlayers?.B;
 
   // Đếm quân
   const countPieces = (player) => {
@@ -243,12 +250,18 @@ export function renderStatus(state, myPlayer, presence) {
     <span class="presence ${presence?.playerB ? 'online' : 'offline'}">🔵 ${presence?.playerB ? 'Online' : 'Chờ...'}</span>
   `;
 
+  let statusTurnHtml = '';
+  if (!isFull) {
+    statusTurnHtml = `<strong style="color:#ffa502">⏳ Đang chờ đối thủ vào phòng (1/2)...</strong>`;
+  } else if (state.winner) {
+    statusTurnHtml = `<strong>🏆 ${state.winner === myPlayer ? 'BẠN THẮNG! 🎉' : 'BẠN THUA!'}</strong><br><small>${state.reason}</small>`;
+  } else {
+    statusTurnHtml = `Lượt: <strong>${turnLabel}</strong> ${isMyTurn ? '← <em>lượt bạn</em>' : ''}`;
+  }
+
   el.innerHTML = `
-    <div class="status-turn ${isMyTurn ? 'my-turn' : ''}">
-      ${state.winner
-        ? `<strong>🏆 ${state.winner === myPlayer ? 'BẠN THẮNG! 🎉' : 'BẠN THUA!'}</strong><br><small>${state.reason}</small>`
-        : `Lượt: <strong>${turnLabel}</strong> ${isMyTurn ? '← <em>lượt bạn</em>' : ''}`
-      }
+    <div class="status-turn ${isMyTurn && isFull ? 'my-turn' : ''}">
+      ${statusTurnHtml}
     </div>
     <div class="status-pieces">
       <div class="pieces-a">🔴 ${PIECE_EMOJI.H}×${cntA.H} ${PIECE_EMOJI.S}×${cntA.S} ${PIECE_EMOJI.P}×${cntA.P}</div>

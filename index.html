@@ -32,8 +32,17 @@
 
     /* ── Header ──────────────────────────────────────────── */
     header {
-      text-align: center;
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header .header-title {
+      text-align: left;
     }
     header h1 {
       font-size: clamp(1.2rem, 4vw, 1.8rem);
@@ -372,6 +381,7 @@
     <p id="win-reason"></p>
     <div class="btn-row">
       <button class="btn btn-primary" id="btn-rematch">🔄 Chơi lại</button>
+      <button class="btn btn-ghost" id="btn-leave-win">🚪 Rời phòng</button>
       <button class="btn btn-ghost" id="btn-close-win">✖ Đóng</button>
     </div>
   </div>
@@ -379,8 +389,13 @@
 
 <!-- Header -->
 <header>
-  <h1>✂️ Oẳn Tù Tì v2 🥊</h1>
-  <div class="room-info" id="room-info"></div>
+  <div class="header-title">
+    <h1>✂️ Oẳn Tù Tì v2 🥊</h1>
+    <div class="room-info" id="room-info"></div>
+  </div>
+  <button class="btn btn-ghost" id="btn-leave" style="display:none;padding:6px 14px;font-size:0.85rem">
+    🚪 Rời phòng
+  </button>
 </header>
 
 <!-- Loading -->
@@ -454,6 +469,7 @@
   // ── State ─────────────────────────────────────────────────────────────────
   let currentState = null;
   let presence = { playerA: false, playerB: false };
+  let prevIsFull = false;
 
   // ── Lobby logic ───────────────────────────────────────────────────────────
   function showLobby() {
@@ -501,9 +517,10 @@
         if (currentState) renderStatus(currentState, myPlayer, presence);
       });
 
-      // Ẩn loading, hiện game
+      // Ẩn loading, hiện game & nút rời phòng
       document.getElementById('loading').style.display = 'none';
       document.getElementById('game-area').classList.add('active');
+      document.getElementById('btn-leave').style.display = 'inline-block';
 
       // Header info
       document.getElementById('room-info').textContent =
@@ -535,12 +552,18 @@
         `<p style="color:red">Lỗi kết nối: ${err.message}</p>`;
     }
   }
-
   // ── Callback khi state thay đổi ───────────────────────────────────────────
   function onStateUpdate(state) {
     if (!state) return;
 
     const prevWinner = currentState?.winner;
+    const isFull = !!(state.joinedPlayers?.A && state.joinedPlayers?.B);
+
+    if (!prevIsFull && isFull && myPlayer) {
+      showNotification('🎉 Đã đủ 2 người chơi! Trận đấu bắt đầu!', 'success', 3500);
+    }
+    prevIsFull = isFull;
+
     currentState = state;
 
     // Render board
@@ -616,6 +639,17 @@
     requestRematch();
     showNotification('Đã gửi yêu cầu chơi lại! Đang chờ đối thủ đồng ý...', 'info', 3000);
   };
+
+  // ── Rời phòng ─────────────────────────────────────────────────────────────
+  function leaveRoom() {
+    if (confirm('Bạn có chắc chắn muốn rời phòng này không?')) {
+      unregisterRoom();
+      location.href = location.pathname;
+    }
+  }
+
+  document.getElementById('btn-leave').onclick = leaveRoom;
+  document.getElementById('btn-leave-win').onclick = leaveRoom;
 
   // ── Cleanup khi rời trang ─────────────────────────────────────────────────
   window.addEventListener('beforeunload', () => {

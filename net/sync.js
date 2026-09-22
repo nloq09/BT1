@@ -77,9 +77,17 @@ export async function initSync(roomId, myPlayer, onStateUpdate) {
     }
   });
 
-  // 4. Đăng ký phòng vào registry toàn cục
+  // 4. Đăng ký phòng vào registry toàn cục và cập nhật joinedPlayers
   if (myPlayer) {
     _registerRoom(roomId, myPlayer);
+    try {
+      _gameChannel.setData((draft) => {
+        if (!draft.joinedPlayers) draft.joinedPlayers = { A: false, B: false };
+        draft.joinedPlayers[myPlayer] = true;
+      });
+    } catch (e) {
+      console.warn('[sync] set joinedPlayers error:', e);
+    }
   }
 
   // 5. Trả về state hiện tại
@@ -101,6 +109,12 @@ export function sendMove(fromRow, fromCol, toRow, toCol) {
   const currentData = _getChannelData(_gameChannel);
   if (!currentData) {
     console.warn('[sync] currentData is null');
+    return false;
+  }
+
+  // Kiểm tra đủ 2 người chơi chưa
+  if (!currentData.joinedPlayers?.A || !currentData.joinedPlayers?.B) {
+    console.warn('[sync] Chưa đủ 2 người chơi trong phòng (cần cả phe A và phe B)');
     return false;
   }
 
@@ -205,16 +219,29 @@ function _updateRoomActivity(roomId) {
 }
 
 export function unregisterRoom() {
-  if (!_roomsChannel || !_roomId || !_myPlayer) return;
-  try {
-    _roomsChannel.setData((draft) => {
-      if (draft.rooms?.[_roomId]) {
-        if (_myPlayer === 'A') draft.rooms[_roomId].playerA = false;
-        if (_myPlayer === 'B') draft.rooms[_roomId].playerB = false;
-      }
-    });
-  } catch (e) {
-    console.warn('[sync] unregisterRoom error:', e);
+  if (!_roomId || !_myPlayer) return;
+
+  if (_gameChannel) {
+    try {
+      _gameChannel.setData((draft) => {
+        if (draft.joinedPlayers) {
+          draft.joinedPlayers[_myPlayer] = false;
+        }
+      });
+    } catch (e) {}
+  }
+
+  if (_roomsChannel) {
+    try {
+      _roomsChannel.setData((draft) => {
+        if (draft.rooms?.[_roomId]) {
+          if (_myPlayer === 'A') draft.rooms[_roomId].playerA = false;
+          if (_myPlayer === 'B') draft.rooms[_roomId].playerB = false;
+        }
+      });
+    } catch (e) {
+      console.warn('[sync] unregisterRoom error:', e);
+    }
   }
 }
 
@@ -280,9 +307,13 @@ export function requestRematch() {
         draft.capturedTypes = fresh.capturedTypes;
         draft.moveHistory   = fresh.moveHistory;
         draft.rematchVotes  = { A: false, B: false };
+        draft.joinedPlayers = { A: true, B: true };
       });
     } catch (e) {
-      _gameChannel.setData(fresh);
+      _gameChannel.setData({
+        ...fresh,
+        joinedPlayers: { A: true, B: true },
+      });
     }
   } else {
     // Chỉ mới 1 bên đồng ý -> Lưu vote chờ bên kia

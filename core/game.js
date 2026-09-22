@@ -98,6 +98,7 @@ export function createInitialBoard() {
     },
     moveHistory: [],       // [{fromRow, fromCol, toRow, toCol, player, captured}]
     rematchVotes: { A: false, B: false }, // Trạng thái đồng ý chơi lại từ 2 bên
+    joinedPlayers: { A: false, B: false }, // Trạng thái 2 người chơi đã vào phòng
   };
 }
 
@@ -249,6 +250,7 @@ export function applyMove(state, fromRow, fromCol, toRow, toCol) {
     capturedTypes: newCapturedTypes,
     moveHistory: newHistory,
     rematchVotes: { A: false, B: false },
+    joinedPlayers: state.joinedPlayers || { A: true, B: true },
   };
 
   // Kiểm tra thắng ngay sau nước đi
