@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OTTv2 — Bảng Giám Sát</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --clr-bg: #0d0d1a;
+      --clr-card: #111827;
+      --clr-border: #1f2d3d;
+      --clr-red: #ef5350;
+      --clr-blue: #42a5f5;
+      --clr-gold: #ffd700;
+      --clr-green: #66bb6a;
+      --clr-text: #e0e0e0;
+      --clr-muted: #6b7280;
+      --mini-cell: 22px;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 {
+      font-size: clamp(1.2rem, 3vw, 1.8rem);
+      background: linear-gradient(90deg, var(--clr-red), var(--clr-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .live-badge {
+      background: #c62828;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* ── Stats bar ───────────────────────────────────────── */
+    #stats-bar {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 0.9rem;
+    }
+    #stats-bar .stat { display: flex; flex-direction: column; gap: 2px; }
+    #stats-bar .stat-label { font-size: 0.75rem; color: var(--clr-muted); }
+    #stats-bar .stat-value { font-size: 1.3rem; font-weight: bold; color: var(--clr-gold); }
+
+    /* ── Room grid ───────────────────────────────────────── */
+    #rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    /* ── Room card ───────────────────────────────────────── */
+    .room-card {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .room-card:hover {
+      border-color: var(--clr-gold);
+      transform: translateY(-2px);
+    }
+    .room-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .room-id {
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: var(--clr-blue);
+      font-weight: bold;
+    }
+    .room-turn {
+      font-size: 0.8rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .turn-a { background: #3b1f1f; color: var(--clr-red); }
+    .turn-b { background: #1f2e3b; color: var(--clr-blue); }
+    .turn-done { background: #2a2a1a; color: var(--clr-gold); }
+
+    .room-presence {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      font-size: 0.75rem;
+    }
+    .p-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 3px;
+    }
+    .p-dot.online { background: var(--clr-green); }
+    .p-dot.offline { background: #444; }
+
+    /* ── Mini board ──────────────────────────────────────── */
+    .mini-board {
+      display: grid;
+      grid-template-columns: repeat(9, var(--mini-cell));
+      grid-template-rows: repeat(9, var(--mini-cell));
+      border: 1px solid #333;
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+    .mini-cell {
+      width: var(--mini-cell);
+      height: var(--mini-cell);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+    .mini-light { background: #1e2d3d; }
+    .mini-dark  { background: #141f2d; }
+    .mini-goal-a {
+      background: rgba(233, 69, 96, 0.25) !important;
+      border: 1px dashed #ff4757;
+    }
+    .mini-goal-b {
+      background: rgba(79, 195, 247, 0.25) !important;
+      border: 1px dashed #4fc3f7;
+    }
+    .mini-piece-a {
+      background: #c81d3d;
+      border: 1px solid #ffccd5;
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(233, 69, 96, 0.9);
+      width: 17px;
+      height: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+    .mini-piece-b {
+      background: #0077b6;
+      border: 1px solid #caf0f8;
+      border-radius: 50%;
+      box-shadow: 0 0 4px rgba(0, 180, 216, 0.9);
+      width: 17px;
+      height: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+
+    .room-footer {
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: var(--clr-muted);
+      text-align: right;
+    }
+    .room-footer a {
+      color: var(--clr-blue);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .room-footer a:hover { text-decoration: underline; }
+
+    /* ── Winner overlay trên card ────────────────────────── */
+    .winner-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: var(--clr-gold);
+      border-radius: 12px;
+    }
+
+    /* ── Modal phóng to ──────────────────────────────────── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-overlay.active { display: flex; }
+    #modal-content {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    #modal-content h2 { margin-bottom: 8px; font-size: 1.2rem; }
+    #modal-content .modal-meta {
+      font-size: 0.85rem;
+      color: var(--clr-muted);
+      margin-bottom: 16px;
+    }
+
+    /* Full-size board trong modal */
+    #modal-board-grid {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(36px, 52px));
+      grid-template-rows: repeat(9, minmax(36px, 52px));
+      border: 2px solid var(--clr-border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 auto;
+      width: fit-content;
+    }
+    .modal-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(18px, 3vw, 26px);
+    }
+    .modal-cell-light { background: #2c3e50; }
+    .modal-cell-dark  { background: #1a252f; }
+    .modal-cell.modal-goal-a { border: 2px solid var(--clr-red); }
+    .modal-cell.modal-goal-b { border: 2px solid var(--clr-blue); }
+    .modal-piece-a {
+      background: radial-gradient(circle at 35% 35%, #ff6b81, #c81d3d 70%, #7a0b20);
+      border: 2px solid #ffccd5;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(233, 69, 96, 0.7);
+      width: 80%;
+      height: 80%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-piece-b {
+      background: radial-gradient(circle at 35% 35%, #48dbfb, #0077b6 70%, #003049);
+      border: 2px solid #caf0f8;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0, 180, 216, 0.7);
+      width: 80%;
+      height: 80%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #modal-close {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: 1px solid var(--clr-muted);
+      color: var(--clr-text);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    #modal-close:hover { background: #222; }
+
+    /* ── Empty state ─────────────────────────────────────── */
+    #empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--clr-muted);
+      display: none;
+    }
+    #empty-state.visible { display: block; }
+    #empty-state h3 { font-size: 1.2rem; margin-bottom: 8px; }
+
+    /* ── New game btn ────────────────────────────────────── */
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .btn-primary { background: var(--clr-red); color: white; }
+    .btn:hover { opacity: 0.85; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>👁 OTTv2 — Bảng Giám Sát</h1>
+    <div style="font-size:0.8rem;color:var(--clr-muted);margin-top:4px">
+      Theo dõi tất cả ván đang diễn ra real-time
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span class="live-badge">● LIVE</span>
+    <a href="index.html" class="btn btn-primary" style="text-decoration:none;padding:8px 16px">
+      ➕ Tạo ván mới
+    </a>
+  </div>
+</header>
+
+<!-- Stats bar -->
+<div id="stats-bar">
+  <div class="stat">
+    <div class="stat-label">Phòng đang hoạt động</div>
+    <div class="stat-value" id="stat-rooms">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Người đang chơi</div>
+    <div class="stat-value" id="stat-players">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Ván đã kết thúc</div>
+    <div class="stat-value" id="stat-finished">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Cập nhật lúc</div>
+    <div class="stat-value" id="stat-time" style="font-size:0.9rem;">--:--</div>
+  </div>
+</div>
+
+<!-- Room cards grid -->
+<div id="rooms-grid"></div>
+
+<!-- Empty state -->
+<div id="empty-state">
+  <h3>🎮 Chưa có ván nào đang diễn ra</h3>
+  <p>Khi có người bắt đầu chơi, các ván sẽ xuất hiện ở đây.</p>
+  <br>
+  <a href="index.html" class="btn btn-primary" style="text-decoration:none;display:inline-block">
+    ➕ Tạo ván mới
+  </a>
+</div>
+
+<!-- Modal phóng to -->
+<div id="modal-overlay">
+  <div id="modal-content">
+    <button id="modal-close">✖ Đóng</button>
+    <h2 id="modal-title">Phòng: —</h2>
+    <div class="modal-meta" id="modal-meta"></div>
+    <div id="modal-board-grid"></div>
+    <div style="margin-top:12px;text-align:center">
+      <a id="modal-join-a" href="#" class="btn" style="background:var(--clr-red);color:white;text-decoration:none;margin:4px">
+        🔴 Tham gia phe Đỏ
+      </a>
+      <a id="modal-join-b" href="#" class="btn" style="background:var(--clr-blue);color:#000;text-decoration:none;margin:4px">
+        🔵 Tham gia phe Xanh
+      </a>
+    </div>
+  </div>
+</div>
+
+
+<script type="module">
+  import { subscribeAllRooms } from './net/sync.js';
+  import { renderMiniBoard } from './ui/board.js';
+  import { PLAYER } from './core/game.js';
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const roomsState = new Map(); // roomId → { info, gameState }
+  let modalRoomId = null;
+
+  // ── Subscribe tất cả phòng ────────────────────────────────────────────────
+  await subscribeAllRooms(onRoomList, onRoomState);
+
+  function onRoomList(rooms) {
+    // Cập nhật info phòng từ registry
+    for (const [roomId, info] of Object.entries(rooms)) {
+      if (!roomsState.has(roomId)) {
+        roomsState.set(roomId, { info, gameState: null });
+      } else {
+        roomsState.get(roomId).info = info;
+      }
+    }
+    updateDashboard();
+  }
+
+  function onRoomState(roomId, gameState) {
+    if (!roomsState.has(roomId)) {
+      roomsState.set(roomId, { info: null, gameState });
+    } else {
+      roomsState.get(roomId).gameState = gameState;
+    }
+
+    // Cập nhật card
+    updateCard(roomId);
+
+    // Nếu modal đang mở với phòng này → cập nhật
+    if (modalRoomId === roomId) {
+      renderModalBoard(roomId);
+    }
+  }
+
+  // ── Render dashboard ──────────────────────────────────────────────────────
+  function updateDashboard() {
+    const rooms = [...roomsState.entries()];
+    const activeCount = rooms.filter(([, d]) => !d.gameState?.winner).length;
+    const finishedCount = rooms.filter(([, d]) => d.gameState?.winner).length;
+    const playerCount = rooms.reduce((sum, [, d]) => {
+      const info = d.info || {};
+      return sum + (info.playerA ? 1 : 0) + (info.playerB ? 1 : 0);
+    }, 0);
+
+    document.getElementById('stat-rooms').textContent = rooms.length;
+    document.getElementById('stat-players').textContent = playerCount;
+    document.getElementById('stat-finished').textContent = finishedCount;
+    document.getElementById('stat-time').textContent = new Date().toLocaleTimeString('vi-VN');
+
+    // Empty state
+    const emptyEl = document.getElementById('empty-state');
+    emptyEl.classList.toggle('visible', rooms.length === 0);
+  }
+
+  function updateCard(roomId) {
+    const data = roomsState.get(roomId);
+    if (!data) return;
+
+    let card = document.getElementById(`card-${CSS.escape(roomId)}`);
+
+    if (!card) {
+      // Tạo card mới
+      card = document.createElement('div');
+      card.className = 'room-card';
+      card.id = `card-${roomId}`;
+      card.onclick = () => openModal(roomId);
+      document.getElementById('rooms-grid').appendChild(card);
+    }
+
+    const gs = data.gameState;
+    const info = data.info || {};
+    const board = gs?.board;
+    const turn = gs?.turn;
+    const winner = gs?.winner;
+
+    // Turn badge
+    let turnHtml = '';
+    if (winner) {
+      const w = winner === 'A' ? '🔴 Đỏ' : '🔵 Xanh';
+      turnHtml = `<span class="room-turn turn-done">🏆 ${w} thắng</span>`;
+    } else if (turn) {
+      const cls = turn === 'A' ? 'turn-a' : 'turn-b';
+      turnHtml = `<span class="room-turn ${cls}">Lượt: ${turn === 'A' ? '🔴 Đỏ' : '🔵 Xanh'}</span>`;
+    }
+
+    // Presence dots
+    const dotA = `<span><span class="p-dot ${info.playerA ? 'online' : 'offline'}"></span>🔴 Đỏ</span>`;
+    const dotB = `<span><span class="p-dot ${info.playerB ? 'online' : 'offline'}"></span>🔵 Xanh</span>`;
+
+    // Mini board HTML placeholder
+    const miniBoardId = `mini-${roomId}`;
+
+    card.innerHTML = `
+      <div class="room-card-header">
+        <div class="room-id">📋 ${escapeHtml(roomId)}</div>
+        ${turnHtml}
+      </div>
+      <div class="room-presence">${dotA} ${dotB}</div>
+      <div id="${miniBoardId}"></div>
+      <div class="room-footer">
+        <a href="index.html?room=${encodeURIComponent(roomId)}&player=A" onclick="event.stopPropagation()">Tham gia 🔴</a>
+        &nbsp;|&nbsp;
+        <a href="index.html?room=${encodeURIComponent(roomId)}&player=B" onclick="event.stopPropagation()">Tham gia 🔵</a>
+        &nbsp;|&nbsp; Click để phóng to
+      </div>
+      ${winner ? `<div class="winner-overlay">🏆 ${winner === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} THẮNG</div>` : ''}
+    `;
+
+    // Render mini board
+    if (board) {
+      const miniContainer = document.getElementById(miniBoardId);
+      if (miniContainer) renderMiniBoard(board, turn, miniContainer);
+    }
+
+    updateDashboard();
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function openModal(roomId) {
+    modalRoomId = roomId;
+    document.getElementById('modal-overlay').classList.add('active');
+    renderModalBoard(roomId);
+
+    // Join links
+    document.getElementById('modal-join-a').href =
+      `index.html?room=${encodeURIComponent(roomId)}&player=A`;
+    document.getElementById('modal-join-b').href =
+      `index.html?room=${encodeURIComponent(roomId)}&player=B`;
+  }
+
+  function renderModalBoard(roomId) {
+    const data = roomsState.get(roomId);
+    if (!data?.gameState) return;
+
+    const { gameState } = data;
+    const grid = document.getElementById('modal-board-grid');
+    grid.innerHTML = '';
+
+    document.getElementById('modal-title').textContent = `Phòng: ${roomId}`;
+
+    const winner = gameState.winner;
+    const turn = gameState.turn;
+    document.getElementById('modal-meta').textContent = winner
+      ? `🏆 ${winner === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} thắng! — ${gameState.reason || ''}`
+      : `Lượt: ${turn === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} | Tổng ${gameState.moveHistory?.length || 0} nước đi`;
+
+    // Render full board
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'modal-cell';
+        const isDark = (r + c) % 2 === 1;
+        cell.classList.add(isDark ? 'modal-cell-dark' : 'modal-cell-light');
+        if (r === 8 && c === 8) cell.classList.add('modal-goal-a');
+        if (r === 0 && c === 0) cell.classList.add('modal-goal-b');
+
+        const piece = gameState.board?.[r]?.[c];
+        if (piece) {
+          const emoji = { H: '🥊', S: '✂️', P: '📄' }[piece.type];
+          cell.textContent = emoji;
+          cell.classList.add(`modal-piece-${piece.player.toLowerCase()}`);
+        }
+        grid.appendChild(cell);
+      }
+    }
+  }
+
+  document.getElementById('modal-close').onclick = () => {
+    document.getElementById('modal-overlay').classList.remove('active');
+    modalRoomId = null;
+  };
+
+  // Click ngoài modal → đóng
+  document.getElementById('modal-overlay').onclick = (e) => {
+    if (e.target === document.getElementById('modal-overlay')) {
+      document.getElementById('modal-overlay').classList.remove('active');
+      modalRoomId = null;
+    }
+  };
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Tự refresh stats mỗi 30s
+  setInterval(updateDashboard, 30000);
+</script>
+</body>
+</html>

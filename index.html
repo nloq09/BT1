@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oẳn Tù Tì v2 — Multiplayer</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --clr-bg: #1a1a2e;
+      --clr-card: #16213e;
+      --clr-border: #0f3460;
+      --clr-red: #e94560;
+      --clr-blue: #4fc3f7;
+      --clr-gold: #ffd700;
+      --clr-green: #66bb6a;
+      --clr-text: #e0e0e0;
+      --clr-muted: #888;
+      --cell-size: min(52px, 9vw);
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    header h1 {
+      font-size: clamp(1.2rem, 4vw, 1.8rem);
+      background: linear-gradient(90deg, var(--clr-red), var(--clr-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header .room-info {
+      font-size: 0.8rem;
+      color: var(--clr-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Lobby (chọn/tạo phòng) ──────────────────────────── */
+    #lobby {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    #lobby h2 { margin-bottom: 16px; }
+    #lobby .btn-row {
+      display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+      margin-top: 16px;
+    }
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--clr-red); color: white; }
+    .btn-secondary { background: var(--clr-blue); color: #000; }
+    .btn-ghost { background: transparent; border: 1px solid var(--clr-muted); color: var(--clr-text); }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--clr-border);
+      border-radius: 8px;
+      background: #0a0a1a;
+      color: var(--clr-text);
+      font-size: 1rem;
+      margin: 8px 0;
+    }
+    .input-label { font-size: 0.85rem; color: var(--clr-muted); text-align: left; margin-bottom: 4px; }
+
+    /* ── Game layout ─────────────────────────────────────── */
+    #game-area {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 900px;
+    }
+    #game-area.active { display: flex; }
+
+    /* ── Status bar ──────────────────────────────────────── */
+    #status-bar {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      width: 100%;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 0.9rem;
+    }
+    #status-bar .status-turn { font-size: 1rem; flex: 1; }
+    #status-bar .status-turn.my-turn { color: var(--clr-gold); }
+    .pieces-a { color: var(--clr-red); }
+    .pieces-b { color: var(--clr-blue); }
+    .presence { padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+    .presence.online { background: #1b5e20; color: #a5d6a7; }
+    .presence.offline { background: #333; color: var(--clr-muted); }
+    .status-presence { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* ── Board wrapper ───────────────────────────────────── */
+    .board-wrapper {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+      gap: 2px;
+    }
+    .col-labels {
+      display: flex;
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .col-labels .label, .row-labels .label {
+      width: var(--cell-size);
+      height: 20px;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--clr-muted);
+      line-height: 20px;
+    }
+    .row-labels {
+      grid-column: 1;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+    }
+    .row-labels .label { width: 18px; }
+    #board-grid {
+      grid-column: 2;
+      grid-row: 2;
+      display: grid;
+      grid-template-columns: repeat(9, var(--cell-size));
+      grid-template-rows: repeat(9, var(--cell-size));
+      border: 2px solid var(--clr-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    /* ── Cells ───────────────────────────────────────────── */
+    .cell {
+      width: var(--cell-size);
+      height: var(--cell-size);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+      position: relative;
+      transition: background 0.15s;
+    }
+    .cell-light { background: #2c3e50; }
+    .cell-dark  { background: #1a252f; }
+    .cell.selected { background: #5c4a00 !important; outline: 2px solid var(--clr-gold); outline-offset: -2px; }
+    .cell.can-move { background: #1a4a1a !important; cursor: pointer; }
+    .cell.can-move::after {
+      content: '';
+      width: 30%;
+      height: 30%;
+      background: var(--clr-green);
+      border-radius: 50%;
+      opacity: 0.7;
+    }
+    .cell.can-capture { background: #4a1a1a !important; cursor: pointer; }
+    .cell.can-capture .piece { filter: drop-shadow(0 0 4px red); }
+    .cell.goal-a {
+      background: rgba(233, 69, 96, 0.22) !important;
+      outline: 2px dashed #ff4757;
+      outline-offset: -2px;
+    }
+    .cell.goal-a::before {
+      content: 'ĐÍCH A';
+      position: absolute;
+      bottom: 2px;
+      font-size: 8px;
+      font-weight: 800;
+      color: #ff6b81;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+    .cell.goal-b {
+      background: rgba(79, 195, 247, 0.22) !important;
+      outline: 2px dashed #4fc3f7;
+      outline-offset: -2px;
+    }
+    .cell.goal-b::before {
+      content: 'ĐÍCH B';
+      position: absolute;
+      top: 2px;
+      font-size: 8px;
+      font-weight: 800;
+      color: #54d2ff;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Pieces — High Contrast Tokens ────────────────────── */
+    .piece {
+      width: calc(var(--cell-size) * 0.82);
+      height: calc(var(--cell-size) * 0.82);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(var(--cell-size) * 0.44);
+      user-select: none;
+      transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.15s;
+      cursor: pointer;
+      position: relative;
+    }
+    .piece:hover {
+      transform: scale(1.18);
+      z-index: 5;
+    }
+
+    /* 🔴 Phe Đỏ (Player A) — Ruby / Crimson Token */
+    .piece-a {
+      background: radial-gradient(circle at 35% 35%, #ff6b81, #c81d3d 70%, #7a0b20);
+      border: 2.5px solid #ffccd5;
+      box-shadow: 0 4px 10px rgba(233, 69, 96, 0.7), inset 0 2px 4px rgba(255,255,255,0.4);
+    }
+    .piece-a::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      width: 6px;
+      height: 6px;
+      background: #ffebee;
+      border-radius: 50%;
+      box-shadow: 0 0 4px #ff1744;
+    }
+
+    /* 🔵 Phe Xanh (Player B) — Ocean / Azure Token */
+    .piece-b {
+      background: radial-gradient(circle at 35% 35%, #48dbfb, #0077b6 70%, #003049);
+      border: 2.5px solid #caf0f8;
+      box-shadow: 0 4px 10px rgba(0, 180, 216, 0.7), inset 0 2px 4px rgba(255,255,255,0.4);
+    }
+    .piece-b::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      width: 6px;
+      height: 6px;
+      background: #e0f7fa;
+      border-radius: 50%;
+      box-shadow: 0 0 4px #00b0ff;
+    }
+
+    /* ── Toast notifications ─────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 1000;
+    }
+    .toast {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      max-width: 280px;
+      opacity: 0;
+      transform: translateX(100%);
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .toast.toast-visible { opacity: 1; transform: translateX(0); }
+    .toast-info    { background: #1565c0; color: white; }
+    .toast-warn    { background: #e65100; color: white; }
+    .toast-success { background: #1b5e20; color: white; }
+    .toast-error   { background: #b71c1c; color: white; }
+
+    /* ── Win banner ──────────────────────────────────────── */
+    #win-banner {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+    #win-banner.active { display: flex; }
+    .win-card {
+      background: var(--clr-card);
+      border: 2px solid var(--clr-gold);
+      border-radius: 16px;
+      padding: 32px 40px;
+      text-align: center;
+      animation: pop 0.4s ease;
+    }
+    @keyframes pop {
+      from { transform: scale(0.6); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .win-card h2 { font-size: 2rem; margin-bottom: 8px; }
+    .win-card p { color: var(--clr-muted); margin-bottom: 20px; }
+    .win-card .btn-row { justify-content: center; }
+
+    /* ── Share link ──────────────────────────────────────── */
+    .share-section {
+      background: var(--clr-card);
+      border: 1px solid var(--clr-border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      width: 100%;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .share-section a { color: var(--clr-blue); text-decoration: none; word-break: break-all; }
+    .share-section a:hover { text-decoration: underline; }
+
+    /* ── Legend ──────────────────────────────────────────── */
+    .legend {
+      font-size: 0.78rem;
+      color: var(--clr-muted);
+      text-align: center;
+    }
+
+    /* ── Loading ─────────────────────────────────────────── */
+    #loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--clr-muted);
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #333;
+      border-top-color: var(--clr-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Win banner -->
+<div id="win-banner">
+  <div class="win-card">
+    <h2 id="win-title">🏆 Kết quả</h2>
+    <p id="win-reason"></p>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-rematch">🔄 Chơi lại</button>
+      <button class="btn btn-ghost" id="btn-close-win">✖ Đóng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>✂️ Oẳn Tù Tì v2 🥊</h1>
+  <div class="room-info" id="room-info"></div>
+</header>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Đang kết nối...</p>
+</div>
+
+<!-- Lobby -->
+<div id="lobby" style="display:none">
+  <h2>🎮 Tham gia game</h2>
+  <p style="color:var(--clr-muted);font-size:0.9rem;margin-bottom:16px">
+    Tạo phòng mới hoặc nhập mã phòng để tham gia.
+  </p>
+
+  <div class="input-label">Mã phòng:</div>
+  <input type="text" id="room-input" placeholder="Ví dụ: room123" maxlength="20" />
+
+  <div class="input-label" style="margin-top:12px">Bạn là:</div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-join-a">🔴 Phe Đỏ (A)</button>
+    <button class="btn btn-secondary" id="btn-join-b">🔵 Phe Xanh (B)</button>
+  </div>
+  <div style="margin-top:12px">
+    <button class="btn btn-ghost" style="font-size:0.8rem" onclick="window.open('spectator.html','_blank')">
+      👁 Xem bảng giám sát
+    </button>
+  </div>
+</div>
+
+<!-- Game area -->
+<div id="game-area">
+  <!-- Status bar (được render bởi ui/board.js) -->
+  <div id="status-bar">Đang tải...</div>
+
+  <!-- Board -->
+  <div id="board-container"></div>
+
+  <!-- Share link -->
+  <div class="share-section" id="share-section" style="display:none">
+    <span>📋 Chia sẻ link cho đối thủ:</span>
+    <a id="share-link" href="#" target="_blank"></a>
+    <button class="btn btn-ghost" style="padding:4px 10px;font-size:0.8rem" id="btn-copy">📋 Copy</button>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    🥊 Búa thắng ✂️ Kéo &nbsp;|&nbsp; ✂️ Kéo thắng 📄 Bao &nbsp;|&nbsp; 📄 Bao thắng 🥊 Búa
+    <br>
+    <span style="color:#ff6b81;font-weight:bold">🔴 Quân Đỏ (Phe A)</span> &nbsp;|&nbsp;
+    <span style="color:#4fc3f7;font-weight:bold">🔵 Quân Xanh (Phe B)</span> &nbsp;|&nbsp;
+    <span style="border:1px dashed #ff4757;padding:1px 4px;color:#ff6b81">ĐÍCH A (i9)</span> &nbsp;
+    <span style="border:1px dashed #4fc3f7;padding:1px 4px;color:#4fc3f7">ĐÍCH B (a1)</span>
+  </div>
+</div>
+
+
+<script type="module">
+  import { initBoard, renderBoard, renderStatus, showNotification } from './ui/board.js';
+  import { initSync, sendMove, subscribePresence, unregisterRoom, requestRematch } from './net/sync.js';
+  import { PLAYER, PIECE_NAME } from './core/game.js';
+
+  // ── Đọc params từ URL ─────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  let roomId = params.get('room');
+  let myPlayer = params.get('player')?.toUpperCase(); // 'A' | 'B' | null
+
+  // Validate player
+  if (myPlayer !== 'A' && myPlayer !== 'B') myPlayer = null;
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let currentState = null;
+  let presence = { playerA: false, playerB: false };
+
+  // ── Lobby logic ───────────────────────────────────────────────────────────
+  function showLobby() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('lobby').style.display = 'block';
+
+    // Random room ID gợi ý
+    document.getElementById('room-input').value =
+      'room' + Math.random().toString(36).slice(2, 7);
+  }
+
+  document.getElementById('btn-join-a').onclick = () => joinGame('A');
+  document.getElementById('btn-join-b').onclick = () => joinGame('B');
+
+  function joinGame(player) {
+    const inputRoomId = document.getElementById('room-input').value.trim();
+    if (!inputRoomId) {
+      alert('Vui lòng nhập mã phòng!');
+      return;
+    }
+    const newUrl = `${location.pathname}?room=${encodeURIComponent(inputRoomId)}&player=${player}`;
+    location.href = newUrl;
+  }
+
+  // ── Khởi động game ────────────────────────────────────────────────────────
+  async function startGame() {
+    if (!roomId) {
+      showLobby();
+      return;
+    }
+
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('lobby').style.display = 'none';
+
+    try {
+      // Khởi tạo PlayHTML sync
+      currentState = await initSync(roomId, myPlayer, onStateUpdate);
+
+      // Khởi tạo board UI
+      initBoard(document.getElementById('board-container'), onMoveAttempt);
+
+      // Subscribe presence
+      subscribePresence((p) => {
+        presence = p;
+        if (currentState) renderStatus(currentState, myPlayer, presence);
+      });
+
+      // Ẩn loading, hiện game
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('game-area').classList.add('active');
+
+      // Header info
+      document.getElementById('room-info').textContent =
+        `Phòng: ${roomId} | Bạn là: ${myPlayer === 'A' ? '🔴 Đỏ' : myPlayer === 'B' ? '🔵 Xanh' : '👁 Khán giả'}`;
+
+      // Share link
+      if (myPlayer) {
+        const opponentPlayer = myPlayer === 'A' ? 'B' : 'A';
+        const shareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}&player=${opponentPlayer}`;
+        const shareSection = document.getElementById('share-section');
+        shareSection.style.display = 'flex';
+        const shareLink = document.getElementById('share-link');
+        shareLink.textContent = shareUrl;
+        shareLink.href = shareUrl;
+
+        document.getElementById('btn-copy').onclick = () => {
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            showNotification('Đã copy link!', 'success');
+          });
+        };
+      }
+
+      // Render lần đầu
+      if (currentState) onStateUpdate(currentState);
+
+    } catch (err) {
+      console.error('Lỗi khởi động game:', err);
+      document.getElementById('loading').innerHTML =
+        `<p style="color:red">Lỗi kết nối: ${err.message}</p>`;
+    }
+  }
+
+  // ── Callback khi state thay đổi ───────────────────────────────────────────
+  function onStateUpdate(state) {
+    if (!state) return;
+
+    const prevWinner = currentState?.winner;
+    currentState = state;
+
+    // Render board
+    renderBoard(state, myPlayer);
+
+    // Render status bar
+    renderStatus(state, myPlayer, presence);
+
+    // Thông báo khi có quân bị ăn
+    const lastMove = state.moveHistory?.[state.moveHistory.length - 1];
+    if (lastMove?.captured) {
+      const { type, player } = lastMove.captured;
+      const emoji = { H: '🥊', S: '✂️', P: '📄' }[type];
+      const phe = player === 'A' ? '🔴 Đỏ' : '🔵 Xanh';
+      showNotification(`${emoji} ${PIECE_NAME[type]} của ${phe} bị ăn!`, 'warn', 2000);
+    }
+
+    // Thắng/thua hoặc cập nhật trạng thái chơi lại
+    if (state.winner) {
+      showWinBanner(state.winner, state.reason, state.rematchVotes);
+    } else if (prevWinner && !state.winner) {
+      // Ván đấu vừa được reset thành công khi cả 2 đồng ý
+      document.getElementById('win-banner').classList.remove('active');
+      document.getElementById('btn-rematch').textContent = '🔄 Chơi lại';
+      showNotification('Cả 2 bên đã đồng ý! Ván mới bắt đầu! 🎉', 'success', 3500);
+    }
+  }
+
+  // ── Callback khi người chơi chọn nước đi ─────────────────────────────────
+  function onMoveAttempt(fromRow, fromCol, toRow, toCol) {
+    if (!currentState) return;
+
+    // Gửi nước đi lên PlayHTML (sẽ validate trong net/sync.js)
+    const ok = sendMove(fromRow, fromCol, toRow, toCol);
+    if (!ok) {
+      showNotification('Nước đi không hợp lệ!', 'error');
+    }
+  }
+
+  // ── Win banner & Rematch consensus ────────────────────────────────────────
+  function showWinBanner(winner, reason, rematchVotes = { A: false, B: false }) {
+    const isWinner = winner === myPlayer;
+    const banner = document.getElementById('win-banner');
+    document.getElementById('win-title').textContent =
+      isWinner ? '🏆 BẠN THẮNG! 🎉' : (winner ? `Phe ${winner === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} thắng! Bạn thua 😢` : 'Hòa!');
+    document.getElementById('win-reason').textContent = reason || '';
+    banner.classList.add('active');
+
+    // Cập nhật trạng thái nút Chơi lại
+    const btnRematch = document.getElementById('btn-rematch');
+    const myVote = myPlayer && rematchVotes?.[myPlayer];
+    const opponent = myPlayer === 'A' ? 'B' : 'A';
+    const opponentVote = rematchVotes?.[opponent];
+
+    if (myVote && !opponentVote) {
+      btnRematch.textContent = '⏳ Đã yêu cầu (Chờ đối thủ... 1/2)';
+      btnRematch.style.opacity = '0.7';
+    } else if (!myVote && opponentVote) {
+      btnRematch.textContent = '🤝 Đối thủ muốn chơi lại! Bấm để đồng ý (1/2)';
+      btnRematch.style.opacity = '1';
+    } else {
+      btnRematch.textContent = '🔄 Chơi lại';
+      btnRematch.style.opacity = '1';
+    }
+  }
+
+  document.getElementById('btn-close-win').onclick = () => {
+    document.getElementById('win-banner').classList.remove('active');
+  };
+
+  document.getElementById('btn-rematch').onclick = () => {
+    if (!myPlayer) return;
+    requestRematch();
+    showNotification('Đã gửi yêu cầu chơi lại! Đang chờ đối thủ đồng ý...', 'info', 3000);
+  };
+
+  // ── Cleanup khi rời trang ─────────────────────────────────────────────────
+  window.addEventListener('beforeunload', () => {
+    unregisterRoom();
+  });
+
+  // ── Start ─────────────────────────────────────────────────────────────────
+  startGame();
+</script>
+</body>
+</html>
