@@ -27,16 +27,12 @@ export function initBoard(containerEl, onMoveCallback) {
   _container = containerEl;
   _onMoveCallback = onMoveCallback;
 
-  // Tạo cấu trúc HTML
+  // Tạo khung rỗng, nội dung nhãn và grid sẽ render theo perspective trong renderBoard
   _container.innerHTML = `
     <div class="board-wrapper">
-      <div class="col-labels">
-        ${[...'abcdefghi'].map(l => `<div class="label">${l}</div>`).join('')}
-      </div>
+      <div class="col-labels" id="col-labels"></div>
       <div class="board-grid" id="board-grid"></div>
-      <div class="row-labels">
-        ${[1,2,3,4,5,6,7,8,9].map(n => `<div class="label">${n}</div>`).join('')}
-      </div>
+      <div class="row-labels" id="row-labels"></div>
     </div>
   `;
 }
@@ -44,7 +40,9 @@ export function initBoard(containerEl, onMoveCallback) {
 // ── Render chính ──────────────────────────────────────────────────────────────
 
 /**
- * Vẽ lại toàn bộ bàn cờ từ state.
+ * Vẽ lại toàn bộ bàn cờ từ state theo góc nhìn của người chơi.
+ * Luật góc nhìn: Quân của mình luôn ở phía DƯỚI, Quân địch luôn ở phía TRÊN.
+ *
  * @param {GameState} state
  * @param {string} myPlayer - 'A' | 'B' | null (spectator)
  */
@@ -53,7 +51,9 @@ export function renderBoard(state, myPlayer) {
   _myPlayer = myPlayer;
 
   const grid = document.getElementById('board-grid');
-  if (!grid) return;
+  const colLabelsEl = document.getElementById('col-labels');
+  const rowLabelsEl = document.getElementById('row-labels');
+  if (!grid || !colLabelsEl || !rowLabelsEl) return;
 
   grid.innerHTML = '';
 
@@ -68,8 +68,24 @@ export function renderBoard(state, myPlayer) {
     _legalMoves = getLegalMoves(state.board, _selectedCell.row, _selectedCell.col);
   }
 
-  for (let row = 0; row < 9; row++) {
-    for (let col = 0; col < 9; col++) {
+  // Xác định thứ tự hiển thị hàng/cột theo góc nhìn:
+  // Phe B: lật ngược 180 độ (B ở dưới rank 9..1, cột i..a) để A (địch) ở trên
+  // Phe A / Spectator: A ở dưới (rank 1..9, cột a..i) để B (địch) ở trên
+  const isPlayerB = myPlayer === 'B';
+  const rowIndices = isPlayerB ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1, 0];
+  const colIndices = isPlayerB ? [8, 7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+  // Render nhãn cột và hàng
+  colLabelsEl.innerHTML = colIndices
+    .map(c => `<div class="label">${'abcdefghi'[c]}</div>`)
+    .join('');
+  rowLabelsEl.innerHTML = rowIndices
+    .map(r => `<div class="label">${r + 1}</div>`)
+    .join('');
+
+  // Render các ô bàn cờ
+  for (const row of rowIndices) {
+    for (const col of colIndices) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.row = row;
