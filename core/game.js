@@ -40,28 +40,39 @@ const DIRECTIONS = [
 // ── Vị trí xuất phát ─────────────────────────────────────────────────────────
 
 /**
- * Tạo danh sách ô xuất phát cho phe A (góc a1 = [0][0]).
- * 3x3 block tại góc trên-trái, xếp theo thứ tự H, H, H, S, S, S, P, P, P
+ * Trộn ngẫu nhiên mảng (Fisher-Yates shuffle).
  */
-function _getStartPositionsA() {
-  // 9 ô: (0,0),(0,1),(0,2),(1,0),(1,1),(1,2),(2,0),(2,1),(2,2)
-  const types = ['H','H','H','S','S','S','P','P','P'];
+function _shuffle(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
+ * Tạo danh sách ô xuất phát cho phe A (góc a1 = [0][0], khu vực 3x3).
+ * Xếp 9 quân cờ (3 H, 3 S, 3 P) theo thứ tự mảng đầu vào.
+ */
+function _getStartPositionsA(types = null) {
+  const pieceTypes = types || _shuffle(['H','H','H','S','S','S','P','P','P']);
   const positions = [];
   let i = 0;
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
-      positions.push({ row: r, col: c, type: types[i++] });
+      positions.push({ row: r, col: c, type: pieceTypes[i++] });
     }
   }
   return positions;
 }
 
 /**
- * Tạo danh sách ô xuất phát cho phe B — đối xứng qua tâm (4,4).
- * Đối xứng điểm: (r,c) → (8-r, 8-c)
+ * Tạo danh sách ô xuất phát cho phe B — đối xứng với phe A qua đường chéo/tâm bàn cờ.
+ * Ô (r, c) của A tương ứng với ô (8 - r, 8 - c) của B mang cùng loại quân.
  */
-function _getStartPositionsB() {
-  return _getStartPositionsA().map(({ row, col, type }) => ({
+function _getStartPositionsB(positionsA) {
+  return positionsA.map(({ row, col, type }) => ({
     row: 8 - row,
     col: 8 - col,
     type,
@@ -71,19 +82,26 @@ function _getStartPositionsB() {
 // ── Khởi tạo bàn cờ ──────────────────────────────────────────────────────────
 
 /**
- * Tạo state ban đầu của game.
+ * Tạo state ban đầu của game với vị trí quân ngẫu nhiên đối xứng.
+ * @param {boolean} randomize - Cho phép xáo trộn ngẫu nhiên vị trí quân (mặc định: true)
  * @returns {GameState}
  */
-export function createInitialBoard() {
-  // board[row][col] = null | { type: 'H'|'S'|'P', player: 'A'|'B' }
+export function createInitialBoard(randomize = true) {
   const board = Array.from({ length: BOARD_SIZE }, () =>
     Array(BOARD_SIZE).fill(null)
   );
 
-  for (const { row, col, type } of _getStartPositionsA()) {
+  const types = randomize
+    ? _shuffle(['H','H','H','S','S','S','P','P','P'])
+    : ['H','H','H','S','S','S','P','P','P'];
+
+  const positionsA = _getStartPositionsA(types);
+  const positionsB = _getStartPositionsB(positionsA);
+
+  for (const { row, col, type } of positionsA) {
     board[row][col] = { type, player: PLAYER.A };
   }
-  for (const { row, col, type } of _getStartPositionsB()) {
+  for (const { row, col, type } of positionsB) {
     board[row][col] = { type, player: PLAYER.B };
   }
 
@@ -421,9 +439,9 @@ export function runTests() {
 
   console.group('🧪 OTTv2 Core Tests');
 
-  // ── Test 1: Tạo bàn cờ ban đầu ────────────────────────────────────────────
-  console.group('Test 1: createInitialBoard');
-  const state0 = createInitialBoard();
+  // ── Test 1: Tạo bàn cờ ban đầu (ngẫu nhiên đối xứng) ──────────────────────
+  console.group('Test 1: createInitialBoard (Randomized & Symmetric)');
+  const state0 = createInitialBoard(true);
   assert(state0.board.length === 9, 'Board có 9 hàng');
   assert(state0.board[0].length === 9, 'Mỗi hàng có 9 cột');
   assert(state0.turn === 'A', 'Lượt đầu là phe A');
@@ -434,13 +452,18 @@ export function runTests() {
   assert(cntA.H === 3 && cntA.S === 3 && cntA.P === 3, 'Phe A có 3H+3S+3P');
   assert(cntB.H === 3 && cntB.S === 3 && cntB.P === 3, 'Phe B có 3H+3S+3P');
 
-  // Kiểm tra đối xứng
-  assert(state0.board[0][0] !== null && state0.board[0][0].player === 'A', 'A có quân ở [0][0]');
-  assert(state0.board[8][8] !== null && state0.board[8][8].player === 'B', 'B có quân ở [8][8]');
-
-  const cellA = state0.board[0][0];
-  const cellB = state0.board[8][8];
-  assert(cellA.type === cellB.type, 'Quân đầu tiên đối xứng cùng loại');
+  // Kiểm tra tính đối xứng qua đường chéo/tâm cho tất cả 9 ô
+  let allSymmetric = true;
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const pieceA = state0.board[r][c];
+      const pieceB = state0.board[8 - r][8 - c];
+      if (!pieceA || !pieceB || pieceA.type !== pieceB.type) {
+        allSymmetric = false;
+      }
+    }
+  }
+  assert(allSymmetric, 'Tất cả 9 quân của phe A và phe B đối xứng hoàn hảo qua đường chéo');
   console.groupEnd();
 
   // ── Test 2: Búa ăn Kéo ────────────────────────────────────────────────────
