@@ -27,11 +27,13 @@ export function initBoard(containerEl, onMoveCallback) {
   _container = containerEl;
   _onMoveCallback = onMoveCallback;
 
-  // Tạo khung rỗng, nội dung nhãn và grid sẽ render theo perspective trong renderBoard
+  // Khung bàn cờ kèm nhãn tọa độ
   _container.innerHTML = `
     <div class="board-wrapper">
       <div class="col-labels" id="col-labels"></div>
-      <div class="board-grid" id="board-grid"></div>
+      <div class="board-grid-wrapper">
+        <div class="board-grid" id="board-grid"></div>
+      </div>
       <div class="row-labels" id="row-labels"></div>
     </div>
   `;
@@ -232,19 +234,6 @@ export function renderStatus(state, myPlayer, presence) {
   const turnLabel = state.turn === PLAYER.A ? '🔴 Đỏ' : '🔵 Xanh';
   const isFull = state.joinedPlayers?.A && state.joinedPlayers?.B;
 
-  // Đếm quân
-  const countPieces = (player) => {
-    const counts = { H: 0, S: 0, P: 0 };
-    for (const row of state.board) {
-      for (const cell of row) {
-        if (cell && cell.player === player) counts[cell.type]++;
-      }
-    }
-    return counts;
-  };
-  const cntA = countPieces('A');
-  const cntB = countPieces('B');
-
   const presenceHtml = `
     <span class="presence ${presence?.playerA ? 'online' : 'offline'}">🔴 ${presence?.playerA ? 'Online' : 'Chờ...'}</span>
     <span class="presence ${presence?.playerB ? 'online' : 'offline'}">🔵 ${presence?.playerB ? 'Online' : 'Chờ...'}</span>
@@ -256,16 +245,12 @@ export function renderStatus(state, myPlayer, presence) {
   } else if (state.winner) {
     statusTurnHtml = `<strong>🏆 ${state.winner === myPlayer ? 'BẠN THẮNG! 🎉' : 'BẠN THUA!'}</strong><br><small>${state.reason}</small>`;
   } else {
-    statusTurnHtml = `Lượt: <strong>${turnLabel}</strong> ${isMyTurn ? '← <em>lượt bạn</em>' : ''}`;
+    statusTurnHtml = `Lượt: <strong>${turnLabel}</strong> ${isMyTurn ? '← <em style="color:var(--clr-gold)">lượt bạn</em>' : ''}`;
   }
 
   el.innerHTML = `
     <div class="status-turn ${isMyTurn && isFull ? 'my-turn' : ''}">
       ${statusTurnHtml}
-    </div>
-    <div class="status-pieces">
-      <div class="pieces-a">🔴 ${PIECE_EMOJI.H}×${cntA.H} ${PIECE_EMOJI.S}×${cntA.S} ${PIECE_EMOJI.P}×${cntA.P}</div>
-      <div class="pieces-b">🔵 ${PIECE_EMOJI.H}×${cntB.H} ${PIECE_EMOJI.S}×${cntB.S} ${PIECE_EMOJI.P}×${cntB.P}</div>
     </div>
     <div class="status-presence">${presenceHtml}</div>
   `;
