@@ -50,15 +50,15 @@ function _getChannelData(channel = _gameChannel) {
 
 /**
  * Khởi tạo kết nối PlayHTML cho một phòng chơi.
+ * Tự động phân bổ vào bên (Xanh hoặc Đỏ) chưa được chọn nếu bên yêu cầu đã có người.
  *
  * @param {string} roomId - Mã phòng
- * @param {string|null} myPlayer - 'A' | 'B' | null (spectator)
+ * @param {string|null} requestedPlayer - 'A' | 'B' | null
  * @param {Function} onStateUpdate - callback(state) khi state thay đổi
- * @returns {Promise<GameState>} state hiện tại
+ * @returns {Promise<{ state: GameState, assignedPlayer: string|null }>}
  */
-export async function initSync(roomId, myPlayer, onStateUpdate) {
+export async function initSync(roomId, requestedPlayer, onStateUpdate) {
   _roomId = roomId;
-  _myPlayer = myPlayer;
   _onStateUpdate = onStateUpdate;
 
   // 1. Khởi tạo và đợi kết nối hoàn tất
@@ -70,28 +70,140 @@ export async function initSync(roomId, myPlayer, onStateUpdate) {
   // 2. Tạo channel sau khi playhtml.ready
   _gameChannel = playhtml.createPageData(channelKey, defaultState);
 
-  // 3. Subscribe cập nhật real-time
+  // 3. Lấy dữ liệu hiện tại từ channel
+  const currentData = _getChannelData(_gameChannel) || defaultState;
+  const joinedA = !!currentData.joinedPlayers?.A;
+  const joinedB = !!currentData.joinedPlayers?.B;
+
+  let assignedPlayer = requestedPlayer;
+
+  // 4. Phân bổ vào bên chưa được chọn
+  if (assignedPlayer === 'A') {
+    if (joinedA && !joinedB) {
+      // Phe A đã có người -> chuyển sang Phe B chưa được chọn
+      assignedPlayer = 'B';
+    } else if (joinedA && joinedB) {
+      // Cả 2 phe đã có người -> Spectator
+      assignedPlayer = null;
+    }
+  } else if (assignedPlayer === 'B') {
+    if (joinedB && !joinedA) {
+      // Phe B đã có người -> chuyển sang Phe A chưa được chọn
+      assignedPlayer = 'A';
+    } else if (joinedA && joinedB) {
+      // Cả 2 phe đã có người -> Spectator
+      assignedPlayer = null;
+    }
+  } else if (!assignedPlayer) {
+    // Không chỉ định phe -> tự động chọn bên còn trống
+    if (!joinedA) {
+      assignedPlayer = 'A';
+    } else if (!joinedB) {
+      assignedPlayer = 'B';
+    } else {
+      assignedPlayer = null;
+    }
+  }
+
+  _myPlayer = assignedPlayer;
+
+  // 5. Subscribe cập nhật real-time
   _gameChannel.onUpdate((data) => {
     if (data && _onStateUpdate) {
       _onStateUpdate(data);
     }
   });
 
-  // 4. Đăng ký phòng vào registry toàn cục và cập nhật joinedPlayers
-  if (myPlayer) {
-    _registerRoom(roomId, myPlayer);
+  // 6. Kiểm tra xem bàn cờ có cần xáo ngẫu nhiên không:
+  // - Nếu là phòng mới tạo (chưa có ai vào trước)
+  // - Hoặc phòng chưa đi nước nào và đang mang cấu hình cũ chưa random
+  const needsRandomize = (!joinedA && !joinedB) || (
+    (!currentData.moveHistory || currentData.moveHistory.length === 0) &&
+    _isOldDefaultBoard(currentData.board)
+  );
+
+  const initialBoardToUse = needsRandomize ? defaultState.board : currentData.board;
+
+  // 7. Đăng ký phòng vào registry toàn cục và cập nhật joinedPlayers & board
+  if (_myPlayer) {
+    _registerRoom(roomId, _myPlayer);
     try {
       _gameChannel.setData((draft) => {
         if (!draft.joinedPlayers) draft.joinedPlayers = { A: false, B: false };
-        draft.joinedPlayers[myPlayer] = true;
+        draft.joinedPlayers[_myPlayer] = true;
+        if (needsRandomize) {
+          draft.board = defaultState.board;
+          draft.turn = defaultState.turn;
+          draft.winner = null;
+          draft.reason = null;
+          draft.capturedTypes = { A: [], B: [] };
+          draft.moveHistory = [];
+        }
       });
     } catch (e) {
       console.warn('[sync] set joinedPlayers error:', e);
     }
   }
 
-  // 5. Trả về state hiện tại
-  return _getChannelData(_gameChannel) ?? defaultState;
+  // 8. Trả về state và assignedPlayer
+  return {
+    state: _getChannelData(_gameChannel) ?? defaultState,
+    assignedPlayer: _myPlayer,
+  };
+}
+
+/**
+ * Kiểm tra xem bàn cờ có đang là cấu hình cố định cũ (HHHSSSPPP) không.
+ */
+function _isOldDefaultBoard(board) {
+  if (!board || !board[0] || !board[1] || !board[2]) return true;
+  return (
+    board[0][0]?.type === 'H' &&
+    board[0][1]?.type === 'H' &&
+    board[0][2]?.type === 'H' &&
+    board[1][0]?.type === 'S' &&
+    board[1][1]?.type === 'S' &&
+    board[1][2]?.type === 'S' &&
+    board[2][0]?.type === 'P' &&
+    board[2][1]?.type === 'P' &&
+    board[2][2]?.type === 'P'
+  );
+}
+
+/**
+ * Đổi vị trí quân ngẫu nhiên đối xứng (chỉ khi trận đấu chưa bắt đầu).
+ */
+export function reshuffleStartingPositions() {
+  if (!_gameChannel || !_myPlayer) return false;
+  const currentData = _getChannelData(_gameChannel);
+  if (!currentData) return false;
+
+  // Không cho xáo khi đã đi nước cờ
+  if (currentData.moveHistory && currentData.moveHistory.length > 0) {
+    return false;
+  }
+
+  const fresh = createInitialBoard(true);
+  try {
+    _gameChannel.setData((draft) => {
+      draft.board = fresh.board;
+      draft.turn = 'A';
+      draft.winner = null;
+      draft.reason = null;
+      draft.capturedTypes = { A: [], B: [] };
+      draft.moveHistory = [];
+    });
+  } catch (e) {
+    _gameChannel.setData({
+      ...currentData,
+      board: fresh.board,
+    });
+  }
+  return true;
+}
+
+export function getMyPlayer() {
+  return _myPlayer;
 }
 
 // ── Gửi nước đi ───────────────────────────────────────────────────────────────

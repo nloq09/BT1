@@ -52,23 +52,54 @@ function _shuffle(array) {
 }
 
 /**
- * Tạo danh sách ô xuất phát cho phe A (góc a1 = [0][0], khu vực 3x3).
- * Xếp 9 quân cờ (3 H, 3 S, 3 P) theo thứ tự mảng đầu vào.
+ * Lấy tất cả 36 ô ứng viên thuộc nửa bàn cờ của Phe A (r + c <= 7).
+ * Không bị giới hạn trong 9 ô góc 3x3 mà có thể nằm ở bất kỳ đâu trên nửa bàn cờ.
  */
-function _getStartPositionsA(types = null) {
-  const pieceTypes = types || _shuffle(['H','H','H','S','S','S','P','P','P']);
-  const positions = [];
-  let i = 0;
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      positions.push({ row: r, col: c, type: pieceTypes[i++] });
+function _getCandidateCellsA() {
+  const cells = [];
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (r + c <= 7) {
+        cells.push({ row: r, col: c });
+      }
     }
   }
-  return positions;
+  return cells;
 }
 
 /**
- * Tạo danh sách ô xuất phát cho phe B — đối xứng với phe A qua đường chéo/tâm bàn cờ.
+ * Tạo danh sách vị trí và loại quân cho phe A.
+ * - Chọn ngẫu nhiên 9 ô phân bố trên toàn bộ nửa bàn cờ của phe A.
+ * - Xếp 9 quân cờ (3 Búa, 3 Kéo, 3 Bao) vào 9 ô được chọn.
+ */
+function _getStartPositionsA(randomize = true) {
+  const pieceTypes = _shuffle(['H','H','H','S','S','S','P','P','P']);
+
+  if (!randomize) {
+    // Bố cục góc 3x3 cũ nếu không randomize
+    const positions = [];
+    let i = 0;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        positions.push({ row: r, col: c, type: pieceTypes[i++] });
+      }
+    }
+    return positions;
+  }
+
+  // Lấy 36 ô ứng viên trên nửa bàn cờ phe A, xáo trộn và lấy 9 ô bất kỳ
+  const candidates = _shuffle(_getCandidateCellsA());
+  const selectedCells = candidates.slice(0, 9);
+
+  return selectedCells.map((cell, idx) => ({
+    row: cell.row,
+    col: cell.col,
+    type: pieceTypes[idx],
+  }));
+}
+
+/**
+ * Tạo danh sách ô xuất phát cho phe B — đối xứng hoàn toàn với phe A qua đường chéo/tâm bàn cờ.
  * Ô (r, c) của A tương ứng với ô (8 - r, 8 - c) của B mang cùng loại quân.
  */
 function _getStartPositionsB(positionsA) {
@@ -82,7 +113,7 @@ function _getStartPositionsB(positionsA) {
 // ── Khởi tạo bàn cờ ──────────────────────────────────────────────────────────
 
 /**
- * Tạo state ban đầu của game với vị trí quân ngẫu nhiên đối xứng.
+ * Tạo state ban đầu của game với vị trí quân ngẫu nhiên đối xứng trên toàn nửa bàn cờ.
  * @param {boolean} randomize - Cho phép xáo trộn ngẫu nhiên vị trí quân (mặc định: true)
  * @returns {GameState}
  */
@@ -91,11 +122,7 @@ export function createInitialBoard(randomize = true) {
     Array(BOARD_SIZE).fill(null)
   );
 
-  const types = randomize
-    ? _shuffle(['H','H','H','S','S','S','P','P','P'])
-    : ['H','H','H','S','S','S','P','P','P'];
-
-  const positionsA = _getStartPositionsA(types);
+  const positionsA = _getStartPositionsA(randomize);
   const positionsB = _getStartPositionsB(positionsA);
 
   for (const { row, col, type } of positionsA) {
@@ -452,18 +479,30 @@ export function runTests() {
   assert(cntA.H === 3 && cntA.S === 3 && cntA.P === 3, 'Phe A có 3H+3S+3P');
   assert(cntB.H === 3 && cntB.S === 3 && cntB.P === 3, 'Phe B có 3H+3S+3P');
 
-  // Kiểm tra tính đối xứng qua đường chéo/tâm cho tất cả 9 ô
+  // Kiểm tra tính đối xứng qua đường chéo/tâm cho toàn bộ 81 ô trên bàn cờ
   let allSymmetric = true;
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      const pieceA = state0.board[r][c];
-      const pieceB = state0.board[8 - r][8 - c];
-      if (!pieceA || !pieceB || pieceA.type !== pieceB.type) {
-        allSymmetric = false;
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const cell = state0.board[r][c];
+      const oppositeCell = state0.board[8 - r][8 - c];
+      if (cell) {
+        if (!oppositeCell) {
+          allSymmetric = false;
+        } else if (cell.type !== oppositeCell.type) {
+          allSymmetric = false;
+        } else if (cell.player === 'A' && oppositeCell.player !== 'B') {
+          allSymmetric = false;
+        } else if (cell.player === 'B' && oppositeCell.player !== 'A') {
+          allSymmetric = false;
+        }
+      } else {
+        if (oppositeCell) {
+          allSymmetric = false;
+        }
       }
     }
   }
-  assert(allSymmetric, 'Tất cả 9 quân của phe A và phe B đối xứng hoàn hảo qua đường chéo');
+  assert(allSymmetric, 'Tất cả 9 quân của phe A và phe B đối xứng hoàn hảo qua đường chéo trên toàn bàn cờ');
   console.groupEnd();
 
   // ── Test 2: Búa ăn Kéo ────────────────────────────────────────────────────

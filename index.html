@@ -393,9 +393,14 @@
     <h1>✂️ Oẳn Tù Tì v2 🥊</h1>
     <div class="room-info" id="room-info"></div>
   </div>
-  <button class="btn btn-ghost" id="btn-leave" style="display:none;padding:6px 14px;font-size:0.85rem">
-    🚪 Rời phòng
-  </button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-secondary" id="btn-shuffle" style="display:none;padding:6px 14px;font-size:0.85rem">
+      🔀 Đổi vị trí quân
+    </button>
+    <button class="btn btn-ghost" id="btn-leave" style="display:none;padding:6px 14px;font-size:0.85rem">
+      🚪 Rời phòng
+    </button>
+  </div>
 </header>
 
 <!-- Loading -->
@@ -414,12 +419,15 @@
   <div class="input-label">Mã phòng:</div>
   <input type="text" id="room-input" placeholder="Ví dụ: room123" maxlength="20" />
 
-  <div class="input-label" style="margin-top:12px">Bạn là:</div>
+  <div class="input-label" style="margin-top:12px">Chọn cách tham gia:</div>
   <div class="btn-row">
-    <button class="btn btn-primary" id="btn-join-a">🔴 Phe Đỏ (A)</button>
-    <button class="btn btn-secondary" id="btn-join-b">🔵 Phe Xanh (B)</button>
+    <button class="btn btn-primary" id="btn-join-auto" style="width:100%">⚡ Vào phòng (Tự động chọn bên trống)</button>
   </div>
-  <div style="margin-top:12px">
+  <div class="btn-row" style="margin-top:8px">
+    <button class="btn btn-ghost" id="btn-join-a" style="font-size:0.85rem">🔴 Phe Đỏ (A)</button>
+    <button class="btn btn-ghost" id="btn-join-b" style="font-size:0.85rem">🔵 Phe Xanh (B)</button>
+  </div>
+  <div style="margin-top:14px">
     <button class="btn btn-ghost" style="font-size:0.8rem" onclick="window.open('spectator.html','_blank')">
       👁 Xem bảng giám sát
     </button>
@@ -455,7 +463,7 @@
 
 <script type="module">
   import { initBoard, renderBoard, renderStatus, showNotification } from './ui/board.js';
-  import { initSync, sendMove, subscribePresence, unregisterRoom, requestRematch } from './net/sync.js';
+  import { initSync, sendMove, subscribePresence, unregisterRoom, requestRematch, reshuffleStartingPositions } from './net/sync.js';
   import { PLAYER, PIECE_NAME } from './core/game.js';
 
   // ── Đọc params từ URL ─────────────────────────────────────────────────────
@@ -481,6 +489,7 @@
       'room' + Math.random().toString(36).slice(2, 7);
   }
 
+  document.getElementById('btn-join-auto').onclick = () => joinGame(null);
   document.getElementById('btn-join-a').onclick = () => joinGame('A');
   document.getElementById('btn-join-b').onclick = () => joinGame('B');
 
@@ -490,7 +499,8 @@
       alert('Vui lòng nhập mã phòng!');
       return;
     }
-    const newUrl = `${location.pathname}?room=${encodeURIComponent(inputRoomId)}&player=${player}`;
+    const playerParam = player ? `&player=${player}` : '';
+    const newUrl = `${location.pathname}?room=${encodeURIComponent(inputRoomId)}${playerParam}`;
     location.href = newUrl;
   }
 
@@ -505,8 +515,41 @@
     document.getElementById('lobby').style.display = 'none';
 
     try {
-      // Khởi tạo PlayHTML sync
-      currentState = await initSync(roomId, myPlayer, onStateUpdate);
+      // Khởi tạo PlayHTML sync (tự động phân bổ vào bên chưa được chọn)
+      const syncResult = await initSync(roomId, myPlayer, onStateUpdate);
+      currentState = syncResult.state;
+      const actualPlayer = syncResult.assignedPlayer;
+
+      // Thông báo điều chỉnh phe nếu có thay đổi hoặc tự động xếp phe
+      if (myPlayer && actualPlayer !== myPlayer) {
+        if (actualPlayer) {
+          showNotification(
+            `Phe ${myPlayer === 'A' ? '🔴 Đỏ' : '🔵 Xanh'} đã có người chọn! Bạn được tự động xếp vào Phe ${actualPlayer === 'A' ? '🔴 Đỏ' : '🔵 Xanh'}.`,
+            'info',
+            5000
+          );
+        } else {
+          showNotification(
+            'Phòng đã đủ 2 người chơi! Bạn đang xem với tư cách Khán giả (Spectator).',
+            'warn',
+            5000
+          );
+        }
+      } else if (!myPlayer && actualPlayer) {
+        showNotification(
+          `Bạn đã tham gia với tư cách Phe ${actualPlayer === 'A' ? '🔴 Đỏ (A)' : '🔵 Xanh (B)'}!`,
+          'success',
+          4000
+        );
+      }
+
+      myPlayer = actualPlayer;
+
+      // Cập nhật URL hiện tại (không reload trang)
+      if (window.history && window.history.replaceState) {
+        const query = myPlayer ? `?room=${encodeURIComponent(roomId)}&player=${myPlayer}` : `?room=${encodeURIComponent(roomId)}`;
+        window.history.replaceState(null, '', location.pathname + query);
+      }
 
       // Khởi tạo board UI
       initBoard(document.getElementById('board-container'), onMoveAttempt);
@@ -543,6 +586,16 @@
         };
       }
 
+      // Xử lý nút đổi vị trí ngẫu nhiên
+      document.getElementById('btn-shuffle').onclick = () => {
+        const ok = reshuffleStartingPositions();
+        if (ok) {
+          showNotification('🎲 Đã đổi vị trí quân ngẫu nhiên (đối xứng 2 bên)!', 'success');
+        } else {
+          showNotification('Không thể đổi vị trí khi ván đấu đã bắt đầu!', 'warn');
+        }
+      };
+
       // Render lần đầu
       if (currentState) onStateUpdate(currentState);
 
@@ -565,6 +618,10 @@
     prevIsFull = isFull;
 
     currentState = state;
+
+    // Nút đổi vị trí quân: chỉ hiện khi chưa có nước đi nào và chưa kết thúc
+    const canShuffle = myPlayer && (!state.moveHistory || state.moveHistory.length === 0) && !state.winner;
+    document.getElementById('btn-shuffle').style.display = canShuffle ? 'inline-block' : 'none';
 
     // Render board
     renderBoard(state, myPlayer);
